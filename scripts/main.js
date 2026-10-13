@@ -3,19 +3,22 @@
  *
  * 1. Heimlichkeitswurf + Status "Versteckt" → der SL sieht den Wert im Token-HUD (Rechtsklick).
  * 2. Angriff aus dem Versteck → automatisch Vorteil, wenn die Heimlichkeit über der passiven Wahrnehmung liegt.
- * 3. Sichtkegel für Token (nur SL, auf Wunsch für einzelne Spieler sichtbar). Wer versteckt hineinläuft,
- *    wird entdeckt: Status weg, gelbes "!" über dem Entdecker, optional Pause + Kampf-Fenster.
- *    Mit "NPC Behavior Automation" drehen sich die Kegel in Laufrichtung.
+ * 3. Sichtkegel für Token (nur SL, auf Wunsch für einzelne Spieler sichtbar). Der Kegel hat eine eigene
+ *    Blickrichtung, der Token selbst wird nie gedreht. Was erkannt wird, stellt der SL pro Token ein
+ *    (nur Gegner oder alle, auch Sichtbare, Namen ignorieren). Bei Erkennung: gelbes "!", Flüstern an den SL,
+ *    Patrouille (NPC Behavior Automation) anhalten. Wer versteckt war, verliert "Versteckt";
+ *    optional Pause + Kampf-Fenster.
  * 4. Status "Versteckt+" (Knopf im HUD, nur SL): Sichtkegel ignorieren diese Figur.
  *
  * Entdeckt wird nur beim aktiven SL-Client (auf der Szene, die er gerade ansieht).
  */
 
-import { MID, SOCKET, HIDING, HIDING_PLUS, setting, isLeader, hasStatus, hidingImg, esc } from "./util.js";
+import { MID, SOCKET, HIDING, HIDING_PLUS, NPCB, setting, hasStatus, hidingImg, esc } from "./util.js";
 import { registerStealthHooks, stealthHudElement, toggleHidingPlus } from "./stealth.js";
 import {
   setupLayer, teardownLayer, refreshCone, refreshAllCones, queueRedraw, wallsChanged, forgetToken,
-  trackMovement, rotationChanged, scheduleCheck, onDetection, broadcastAlert, showAlert, coneConfig, tokenName
+  trackMovement, facingChanged, scheduleCheck, resetDetection, onDetection, broadcastAlert, showAlert,
+  coneConfig, tokenName, setFacing, facingTowards
 } from "./cones.js";
 import { ConeConfig, ViewerConfig, openCombatPrompt } from "./apps.js";
 
@@ -73,14 +76,24 @@ Hooks.once("init", () => {
     type: new foundry.data.fields.ColorField({ initial: "#f2c94c" }),
     default: "#f2c94c", onChange: redraw
   });
-  reg("ignoreSameDisposition", {
-    name: "Nur Gegner entdecken",
-    hint: "Ein Sichtkegel entdeckt nur Figuren mit anderer Gesinnung (freundlich/neutral/feindlich) als sein Token.",
+  reg("lookAtTarget", {
+    name: "Bei Erkennung zum Ziel schauen",
+    hint: "Der Sichtkegel des Wächters richtet sich auf die erkannte Figur aus (der Token selbst dreht sich nicht).",
     type: Boolean, default: true
+  });
+  reg("pausePatrol", {
+    name: "Patrouille bei Erkennung anhalten",
+    hint: "Für NSCs aus „Ascandir - DnD5e NPC Behavior Automation“. Im Chat bekommt der SL einen Knopf zum Fortsetzen.",
+    type: Boolean, default: true
+  });
+  reg("pausePatrolSeconds", {
+    name: "Patrouille anhalten für (Sekunden)",
+    hint: "0 = bis der SL sie im Chat (oder im NPC-Behavior-Fenster) fortsetzt.",
+    type: Number, default: 0, range: { min: 0, max: 300, step: 5 }
   });
   reg("autoTurn", {
     name: "Sichtkegel drehen sich in Laufrichtung",
-    hint: "Zusammenspiel mit „Ascandir - DnD5e NPC Behavior Automation“: Kegel laufender NSCs schauen dorthin, wohin sie gehen.",
+    hint: "Nur der Kegel dreht sich, der Token bleibt, wie er ist. Zusammenspiel mit „Ascandir - DnD5e NPC Behavior Automation“.",
     type: String, default: "npc",
     choices: {
       off: "Aus",
@@ -93,12 +106,12 @@ Hooks.once("init", () => {
     type: Number, default: 4, range: { min: 1, max: 15, step: 1 }
   });
   reg("chatNotice", {
-    name: "Entdeckung im Chat melden (nur SL)",
+    name: "Erkennung im Chat melden (nur SL)",
     type: Boolean, default: true
   });
   reg("autoCombat", {
     name: "Bei Entdeckung pausieren und Kampf vorbereiten",
-    hint: "Das Spiel wird pausiert und der SL bekommt ein Fenster, in dem er auswählt, wer dem Kampf beitritt. Läuft in der Szene schon ein Kampf, passiert das nicht.",
+    hint: "Nur wenn eine versteckte Figur entdeckt wird: Das Spiel wird pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt. Läuft in der Szene schon ein Kampf, passiert das nicht.",
     type: Boolean, default: false
   });
   game.settings.register(MID, "coneViewers", {
@@ -130,34 +143,101 @@ Hooks.once("setup", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Entdeckung                                                         */
+/*  Erkennung                                                          */
 /* ------------------------------------------------------------------ */
 
 function combatRunningHere() {
   return game.combats?.some((c) => c.started && c.scene?.id === canvas.scene?.id) ?? false;
 }
 
+/** Läuft für diesen Token ein Verhalten aus "NPC Behavior Automation"? */
+function npcApi(doc) {
+  const mod = game.modules.get(NPCB);
+  if (!mod?.active || !doc.getFlag(NPCB, "config")?.enabled) return null;
+  return mod.api ?? null;
+}
+
+const resumeTimers = new Map();
+
+/** Patrouille anhalten. Rückgabe: true, wenn angehalten wurde */
+async function pausePatrol(doc) {
+  if (!setting("pausePatrol")) return false;
+  const api = npcApi(doc);
+  if (!api) return false;
+  const secs = Math.max(0, Number(setting("pausePatrolSeconds")) || 0);
+  try {
+    if (typeof api.pause === "function") {
+      await api.pause(doc.id);
+      clearTimeout(resumeTimers.get(doc.id));
+      if (secs > 0) resumeTimers.set(doc.id, setTimeout(() => resumePatrol(doc.sceneId ?? doc.parent?.id, doc.id), secs * 1000));
+    } else {
+      api.brains?.get(doc.id)?.interrupt?.((secs || 600) * 1000);
+    }
+    return true;
+  } catch (err) {
+    console.warn(`${MID} | Patrouille konnte nicht angehalten werden`, err);
+    return false;
+  }
+}
+
+async function resumePatrol(sceneId, tokenId) {
+  clearTimeout(resumeTimers.get(tokenId));
+  resumeTimers.delete(tokenId);
+  const doc = game.scenes.get(sceneId)?.tokens.get(tokenId);
+  const api = game.modules.get(NPCB)?.api;
+  if (!doc) return;
+  if (typeof api?.resume === "function" && canvas.scene?.id === sceneId) await api.resume(tokenId);
+  else await doc.update({ [`flags.${NPCB}.paused`]: false });
+}
+
 onDetection(async (finds) => {
-  for (const { watcher, hidden } of finds) {
+  const paused = new Set();
+  for (const { watcher, target, wasHidden } of finds) {
     broadcastAlert(watcher.id);
+    if (setting("lookAtTarget")) {
+      try { await setFacing(watcher.document, facingTowards(watcher, target)); } catch (err) { /* egal */ }
+    }
+    if (!paused.has(watcher.id) && await pausePatrol(watcher.document)) paused.add(watcher.id);
+    if (wasHidden) {
+      try {
+        if (hasStatus(target.actor, HIDING)) await target.actor.toggleStatusEffect(HIDING, { active: false });
+      } catch (err) {
+        console.warn(`${MID} | „Versteckt“ konnte nicht entfernt werden`, err);
+      }
+    }
     if (setting("chatNotice")) {
+      const verb = wasHidden ? "hat <strong>{t}</strong> entdeckt (war versteckt)!" : "hat <strong>{t}</strong> bemerkt.";
+      const button = paused.has(watcher.id) && !(Number(setting("pausePatrolSeconds")) > 0)
+        ? `<button type="button" class="asv-resume" data-scene="${canvas.scene.id}" data-token="${watcher.id}"><i class="fa-solid fa-play"></i> Patrouille fortsetzen</button>`
+        : "";
       ChatMessage.create({
-        content: `<p class="asv-chat"><i class="fa-solid fa-eye"></i> <strong>${tokenName(watcher)}</strong> hat <strong>${tokenName(hidden)}</strong> entdeckt!</p>`,
+        content: `<div class="asv-chat"><p><i class="fa-solid fa-eye"></i> <strong>${tokenName(watcher)}</strong> ${verb.replace("{t}", tokenName(target))}</p>${paused.has(watcher.id) ? `<p class="asv-sub">Patrouille angehalten.</p>` : ""}${button}</div>`,
         whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id),
         speaker: { alias: "Stealth n Vision" }
       });
     }
-    try {
-      if (hasStatus(hidden.actor, HIDING)) await hidden.actor.toggleStatusEffect(HIDING, { active: false });
-    } catch (err) {
-      console.warn(`${MID} | „Versteckt“ konnte nicht entfernt werden`, err);
-    }
   }
-  if (setting("autoCombat") && !combatRunningHere()) {
+  const discovered = finds.filter((f) => f.wasHidden);
+  if (discovered.length && setting("autoCombat") && !combatRunningHere()) {
     if (!game.paused) game.togglePause(true, { broadcast: true });
-    openCombatPrompt(finds);
+    openCombatPrompt(discovered.map((f) => ({ watcher: f.watcher, hidden: f.target })));
   }
 });
+
+/* Knopf "Patrouille fortsetzen" in der Chatnachricht */
+function wireChat(message, html) {
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  root?.querySelectorAll?.(".asv-resume").forEach((btn) => {
+    if (!game.user.isGM) return btn.remove();
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      await resumePatrol(btn.dataset.scene, btn.dataset.token);
+      btn.innerHTML = `<i class="fa-solid fa-check"></i> Patrouille läuft wieder`;
+    });
+  });
+}
+Hooks.on("renderChatMessageHTML", wireChat);
 
 /* ------------------------------------------------------------------ */
 /*  Hooks                                                              */
@@ -181,6 +261,7 @@ Hooks.once("ready", () => {
 });
 
 Hooks.on("canvasReady", () => {
+  resetDetection();
   setupLayer();
   refreshAllCones();
   scheduleCheck();
@@ -194,8 +275,8 @@ Hooks.on("refreshToken", (token) => {
 });
 Hooks.on("updateToken", (doc, changes) => {
   if (doc.parent !== canvas.scene) return;
-  if ("rotation" in changes) rotationChanged(doc);
-  if (foundry.utils.hasProperty(changes, `flags.${MID}`) || "hidden" in changes || "rotation" in changes) {
+  if (foundry.utils.hasProperty(changes, `flags.${MID}.facing`)) facingChanged(doc);
+  if (foundry.utils.hasProperty(changes, `flags.${MID}`) || "hidden" in changes || "disposition" in changes || "name" in changes) {
     const t = doc.object;
     if (t) refreshCone(t);
     scheduleCheck();

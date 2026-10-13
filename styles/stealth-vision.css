@@ -129,6 +129,32 @@
   margin: 0.3rem 0;
 }
 
+.ascandir-asv fieldset {
+  border: 1px solid var(--color-border-light-tertiary, #7a7971);
+  border-radius: 6px;
+  margin: 0.4rem 0;
+  padding: 0.3rem 0.6rem 0.5rem;
+}
+
+.ascandir-asv legend {
+  font-weight: bold;
+  padding: 0 0.3rem;
+}
+
+.ascandir-asv .form-group.stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ascandir-asv .asv-hint.warn {
+  color: #b8860b;
+  opacity: 1;
+}
+
+.ascandir-asv .asv-hint.warn button {
+  margin-top: 0.25rem;
+}
+
 .ascandir-asv .asv-footer {
   display: flex;
   gap: 0.4rem;
@@ -203,4 +229,7 @@
 /* Chat */
 
 .asv-chat i { color: #d4a514; }
+.asv-chat .asv-sub { font-size: 0.85em; opacity: 0.8; margin: 0.2rem 0; }
+.asv-chat .asv-resume { margin-top: 0.3rem; }
+.asv-chat .asv-resume i { color: inherit; }
 .asv-flavor { font-style: italic; color: #b8860b; }

@@ -25,12 +25,23 @@ https://github.com/Ascandir/Ascandir---DnD5e-Stealth-n-Vision/releases/latest/do
 
 ### Sichtkegel
 - Rechtsklick auf einen Token → Knopf mit dem Auge: Sichtkegel an, Reichweite, Öffnungswinkel, Blickrichtung. Mehrere ausgewählte Token lassen sich gleich mit einstellen.
-- Die Blickrichtung ist die Drehung des Tokens (auch mit Shift + Mausrad).
+- Der Kegel hat eine eigene Blickrichtung. **Der Token selbst wird nie gedreht.** Ist ein Token noch gedreht, gibt es im Fenster einen Knopf „Token gerade stellen“.
 - Nur der SL sieht die Kegel. In den Moduleinstellungen kann er sie einzelnen Spielern freigeben. Jeder kann sie mit dem Augen-Knopf in der Token-Leiste für sich ausblenden.
-- Läuft eine versteckte Figur in einen Sichtkegel, verliert sie „Versteckt“ und über dem Entdecker erscheint ein gelbes **!**.
-- Wände und geschlossene Türen blockieren den Kegel. Unsichtbare Figuren werden nicht entdeckt, ebenso wenig blinde, bewusstlose oder tote Wachen.
-- Optional: Bei Entdeckung wird das Spiel pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt.
-- Zusammen mit **Ascandir - DnD5e NPC Behavior Automation** drehen sich die Kegel laufender NSCs in Laufrichtung (einstellbar: aus / nur NPC-Behavior / alle).
+- Wände und geschlossene Türen blockieren den Kegel.
+
+#### Erkennung (pro Token einstellbar)
+- **Nur Gegner** (entgegengesetzte Gesinnung: feindliche Wachen achten auf freundliche Figuren und umgekehrt, neutrale auf beide) oder **alle Gesinnungen**.
+- **Auch nicht versteckte Token erkennen** (an/aus).
+- **Namen ignorieren:** z. B. `Wirt; Barmaid; Stallbursche` (Token- oder Actor-Name, Groß-/Kleinschreibung egal).
+- Bei Erkennung: gelbes **!** über dem Wächter, der Kegel schaut zum Ziel, der SL bekommt eine geflüsterte Chatnachricht.
+- Nicht versteckte Figuren werden nur beim **Hineinlaufen** gemeldet (nicht dauernd, nicht im Kampf).
+- Wer versteckt war, verliert „Versteckt“. Optional: Spiel pausieren und Kampf-Fenster öffnen.
+- Unsichtbare, für Spieler versteckte und tote Token werden nicht erkannt. Blinde, bewusstlose oder tote Wachen erkennen niemanden.
+
+#### Zusammenspiel mit NPC Behavior Automation
+- Kegel laufender NSCs drehen sich in Laufrichtung (einstellbar: aus / nur NPC-Behavior / alle).
+- Bei Erkennung wird die Patrouille angehalten. In der Chatnachricht gibt es einen Knopf **Patrouille fortsetzen**. Alternativ läuft sie nach einer einstellbaren Zeit von selbst weiter.
+- Tipp: Im NPC-Behavior-Fenster „In Laufrichtung drehen“ ausgeschaltet lassen, sonst dreht das NPC-Modul den Token selbst.
 
 ### Versteckt+ (nur SL)
 - Knopf im Rechtsklick-Menü von Spielerfiguren (Versteckt-Symbol mit Plus).

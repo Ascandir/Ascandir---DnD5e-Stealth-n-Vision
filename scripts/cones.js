@@ -1,6 +1,8 @@
 /*
  * Sichtkegel: zeichnen (SL + freigegebene Spieler), in Laufrichtung drehen,
- * versteckte Figuren im Kegel entdecken (läuft nur beim aktiven SL).
+ * Figuren im Kegel erkennen (läuft nur beim aktiven SL).
+ *
+ * Der Kegel hat eine eigene Blickrichtung (Flag "facing"). Der Token selbst wird nie gedreht.
  */
 
 import {
@@ -16,7 +18,9 @@ const state = {
   wallVersion: 0,
   checkQueued: false,
   redrawQueued: false,
-  pending: new Map(),    // tokenId → Zeitpunkt der letzten Entdeckung
+  inside: new Set(),     // "wächterId|zielId" – wer gerade im Kegel steht
+  lastFired: new Map(),  // "wächterId|zielId" → Zeitpunkt der letzten Meldung
+  primed: false,         // erste Prüfung nach dem Laden meldet bereits Sichtbare nicht
   warnedPoly: false
 };
 
@@ -29,13 +33,21 @@ const PIXI8 = () => String(PIXI?.VERSION ?? "").startsWith("8");
 /*  Konfiguration                                                      */
 /* ------------------------------------------------------------------ */
 
+/** Namen aus "Name1; Name2" → Liste in Kleinbuchstaben */
+export function parseNames(text) {
+  return String(text ?? "").split(";").map((n) => n.trim().toLowerCase()).filter(Boolean);
+}
+
 /** Sichtkegel eines Tokens, oder null wenn keiner aktiv ist */
 export function coneConfig(doc) {
   const f = doc?.getFlag?.(MID, "cone");
   if (!f?.enabled) return null;
   return {
     range: Math.max(1, num(f.range, setting("defaultRange"))),
-    angle: clamp(num(f.angle, setting("defaultAngle")), 5, 360)
+    angle: clamp(num(f.angle, setting("defaultAngle")), 5, 360),
+    detect: f.detect === "all" ? "all" : "enemies",
+    visible: f.visible !== false,
+    ignore: parseNames(f.ignore)
   };
 }
 
@@ -44,7 +56,10 @@ export function rawConeConfig(doc) {
   return {
     enabled: !!f.enabled,
     range: num(f.range, setting("defaultRange")),
-    angle: num(f.angle, setting("defaultAngle"))
+    angle: num(f.angle, setting("defaultAngle")),
+    detect: f.detect === "all" ? "all" : "enemies",
+    visible: f.visible !== false,
+    ignore: String(f.ignore ?? "")
   };
 }
 
@@ -62,16 +77,31 @@ function autoTurnApplies(doc) {
   return false;
 }
 
-/** Dreht das NPC-Modul den Token schon selbst (Foundry-eigenes Mitdrehen)? */
-function npcRotatesItself(doc) {
-  const c = doc.getFlag(NPCB, "config");
-  return !!game.modules.get(NPCB)?.active && !!c?.enabled && !!c?.autoRotate;
+/** Gespeicherte Blickrichtung des Kegels (0° = nach unten/Süden, im Uhrzeigersinn) */
+export function storedFacing(doc) {
+  const f = doc?.getFlag?.(MID, "facing");
+  return normDeg(num(f, num(doc?.rotation)));
 }
 
-/** Blickrichtung in Foundry-Rotation (0° = nach unten/Süden, im Uhrzeigersinn) */
+/** Aktuelle Blickrichtung (während des Laufens die mitgedrehte) */
 export function facingOf(token) {
   const live = state.live.get(token.id);
-  return live ? live.facing : normDeg(num(token.document.rotation));
+  return live ? live.facing : storedFacing(token.document);
+}
+
+/** Kegel in eine Richtung schauen lassen (nur das Flag, nie die Token-Drehung) */
+export async function setFacing(doc, deg) {
+  const v = Math.round(normDeg(deg));
+  const l = state.live.get(doc.id);
+  if (l) { l.facing = v; l.target = v; }
+  if (angDiff(v, storedFacing(doc)) < 1 && doc.getFlag(MID, "facing") !== undefined) return;
+  await doc.update({ [`flags.${MID}.facing`]: v });
+}
+
+/** Blickrichtung von a nach b */
+export function facingTowards(a, b) {
+  const ca = liveCenter(a), cb = liveCenter(b);
+  return normDeg(Math.toDegrees(Math.atan2(cb.y - ca.y, cb.x - ca.x)) - 90);
 }
 
 /* ------------------------------------------------------------------ */
@@ -239,7 +269,7 @@ export function forgetToken(id) {
   const l = state.live.get(id);
   if (l) clearTimeout(l.timer);
   state.live.delete(id);
-  state.pending.delete(id);
+  for (const key of [...state.inside]) if (key.includes(id)) state.inside.delete(key);
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,7 +286,8 @@ export function trackMovement(token) {
   const c = liveCenter(token);
   let l = state.live.get(token.id);
   if (!l) {
-    l = { facing: normDeg(num(doc.rotation)), target: normDeg(num(doc.rotation)), x: c.x, y: c.y, timer: null };
+    const f = storedFacing(doc);
+    l = { facing: f, target: f, x: c.x, y: c.y, timer: null };
     state.live.set(token.id, l);
     return;
   }
@@ -280,32 +311,30 @@ function forgetLive(id) {
   state.live.delete(id);
 }
 
-/** Nach dem Stehenbleiben die Blickrichtung als Token-Rotation speichern */
+/** Nach dem Stehenbleiben die Blickrichtung des Kegels speichern (Token bleibt, wie er ist) */
 async function persistFacing(id) {
   const l = state.live.get(id);
   const doc = canvas.scene?.tokens.get(id);
   if (!l || !doc) return;
   l.facing = l.target;
-  if (npcRotatesItself(doc)) return;
-  if (angDiff(l.target, num(doc.rotation)) < 1) return;
   try {
-    await doc.update({ rotation: Math.round(l.target) }, { animate: false, [MID]: { turn: true } });
+    await setFacing(doc, l.target);
   } catch (err) {
-    console.warn(`${MID} | Drehen fehlgeschlagen`, err);
+    console.warn(`${MID} | Blickrichtung speichern fehlgeschlagen`, err);
   }
 }
 
-/** Rotation wurde von außen geändert → eigene Blickrichtung verwerfen */
-export function rotationChanged(doc) {
+/** Blickrichtung wurde gespeichert (vom SL oder per Dialog) → übernehmen */
+export function facingChanged(doc) {
   const l = state.live.get(doc.id);
   if (!l) return;
-  const r = normDeg(num(doc.rotation));
+  const r = storedFacing(doc);
   l.facing = r;
   l.target = r;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Entdecken                                                          */
+/*  Erkennen                                                           */
 /* ------------------------------------------------------------------ */
 
 export function scheduleCheck() {
@@ -317,19 +346,42 @@ export function scheduleCheck() {
   }, 120);
 }
 
+/** Nach Szenenwechsel: wer schon im Kegel steht, wird nicht sofort gemeldet */
+export function resetDetection() {
+  state.inside.clear();
+  state.primed = false;
+}
+
 function canDetect(token) {
   const actor = token.actor;
   if (!actor) return false;
   return !BLIND_STATUSES.some((s) => hasStatus(actor, s));
 }
 
-function isSneaking(token) {
+/** Kann dieser Token überhaupt erkannt werden? */
+function detectable(token) {
   const actor = token.actor;
-  if (!actor || !hasStatus(actor, HIDING)) return false;
-  if (hasStatus(actor, HIDING_PLUS)) return false;
-  if (hasStatus(actor, "invisible")) return false;
-  const last = state.pending.get(token.id);
-  return !last || Date.now() - last > 3000;
+  if (!actor || token.document.hidden) return false;
+  const defeated = CONFIG.specialStatusEffects?.DEFEATED ?? "dead";
+  if (hasStatus(actor, "dead") || hasStatus(actor, defeated)) return false;
+  if (hasStatus(actor, HIDING_PLUS) || hasStatus(actor, "invisible")) return false;
+  return true;
+}
+
+/** Gegner aus Sicht des Wächters: freundlich ↔ feindlich, neutrale Wächter achten auf beide */
+function isEnemy(watcher, target) {
+  const D = CONST.TOKEN_DISPOSITIONS;
+  const w = watcher.document.disposition, t = target.document.disposition;
+  if (w === D.HOSTILE) return t === D.FRIENDLY;
+  if (w === D.FRIENDLY) return t === D.HOSTILE;
+  if (w === D.NEUTRAL) return t === D.HOSTILE || t === D.FRIENDLY;
+  return false;
+}
+
+function isIgnored(cfg, target) {
+  if (!cfg.ignore.length) return false;
+  const names = [target.document.name, target.actor?.name].filter(Boolean).map((n) => n.trim().toLowerCase());
+  return names.some((n) => cfg.ignore.includes(n));
 }
 
 function insideCone(poly, token) {
@@ -339,27 +391,46 @@ function insideCone(poly, token) {
   return pts.some(([x, y]) => poly.contains(x, y));
 }
 
+function combatRunningHere() {
+  return game.combats?.some((c) => c.started && c.scene?.id === canvas.scene?.id) ?? false;
+}
+
 function runCheck() {
   if (!setting("conesEnabled") || !canvas?.ready) return;
   const tokens = canvas.tokens.placeables;
-  const sneaking = tokens.filter(isSneaking);
-  if (!sneaking.length) return;
   const watchers = tokens.filter((t) => coneConfig(t.document) && canDetect(t));
-  if (!watchers.length) return;
-  const sameIgnored = !!setting("ignoreSameDisposition");
+  const targets = tokens.filter(detectable);
+  const now = Date.now();
+  const inCombat = combatRunningHere();
+  const seen = new Set();
   const finds = [];
-  for (const h of sneaking) {
-    for (const w of watchers) {
-      if (w === h || w.actor === h.actor) continue;
-      if (sameIgnored && w.document.disposition === h.document.disposition) continue;
-      const poly = conePolygon(w);
-      if (poly && insideCone(poly, h)) {
-        finds.push({ watcher: w, hidden: h });
-        state.pending.set(h.id, Date.now());
-        break;
+
+  for (const w of watchers) {
+    const cfg = coneConfig(w.document);
+    let poly = null;
+    for (const t of targets) {
+      if (t === w || t.actor === w.actor) continue;
+      const hidden = hasStatus(t.actor, HIDING);
+      if (!hidden && !cfg.visible) continue;
+      if (cfg.detect === "enemies" && !isEnemy(w, t)) continue;
+      if (isIgnored(cfg, t)) continue;
+      poly ??= conePolygon(w, cfg);
+      if (!poly || !insideCone(poly, t)) continue;
+
+      const key = `${w.id}|${t.id}`;
+      seen.add(key);
+      const isNew = !state.inside.has(key);
+      const cooled = now - (state.lastFired.get(key) ?? 0) > 10000;
+      // Versteckte werden immer entdeckt; Sichtbare nur beim Hineinlaufen (nicht direkt nach dem Laden, nicht im Kampf)
+      const report = hidden || (isNew && cooled && state.primed && !inCombat);
+      if (report && (hidden ? cooled || isNew : true)) {
+        state.lastFired.set(key, now);
+        finds.push({ watcher: w, target: t, wasHidden: hidden });
       }
     }
   }
+  state.inside = seen;
+  state.primed = true;
   if (finds.length) detectionHandler?.(finds);
 }
 

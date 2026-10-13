@@ -1,8 +1,8 @@
 {
   "id": "ascandir-stealth-vision",
   "title": "Ascandir - DnD5e Stealth n Vision",
-  "description": "Heimlichkeit mit System: Der SL sieht den gewürfelten Heimlichkeitswert im Token-HUD, Angriffe aus dem Versteck bekommen automatisch Vorteil gegen niedrigere passive Wahrnehmung, und Sichtkegel für Wachen entdecken versteckte Figuren – auf Wunsch mit Pause und Kampfvorbereitung.",
-  "version": "0.1.0",
+  "description": "Heimlichkeit mit System: Der SL sieht den gewürfelten Heimlichkeitswert im Token-HUD, Angriffe aus dem Versteck bekommen automatisch Vorteil, und Sichtkegel für Wachen erkennen Figuren – mit Meldung an den SL, angehaltener Patrouille und auf Wunsch Kampfvorbereitung.",
+  "version": "0.2.0",
   "authors": [
     {
       "name": "Ascandir"

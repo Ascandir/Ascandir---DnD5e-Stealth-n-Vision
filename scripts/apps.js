@@ -1,7 +1,7 @@
 /* Fenster: Sichtkegel einstellen, Spieler-Freigabe, Kampf nach Entdeckung */
 
 import { MID, setting, num, clamp, normDeg, esc } from "./util.js";
-import { rawConeConfig } from "./cones.js";
+import { rawConeConfig, storedFacing } from "./cones.js";
 
 const { ApplicationV2 } = foundry.applications.api;
 
@@ -27,7 +27,8 @@ export class ConeConfig extends ApplicationV2 {
     position: { width: 420, height: "auto" },
     actions: {
       save: ConeConfig._onSave,
-      dir: ConeConfig._onDir
+      dir: ConeConfig._onDir,
+      straighten: ConeConfig._onStraighten
     }
   };
 
@@ -35,7 +36,8 @@ export class ConeConfig extends ApplicationV2 {
 
   async _renderHTML() {
     const c = rawConeConfig(this.doc);
-    const rot = Math.round(normDeg(num(this.doc.rotation)));
+    const rot = Math.round(storedFacing(this.doc));
+    const tokenTurned = Math.round(normDeg(num(this.doc.rotation))) !== 0;
     const units = canvas.scene?.grid?.units || "ft";
     const selected = (canvas.tokens?.controlled ?? []).filter((t) => t.document !== this.doc).length;
     const dirButtons = DIRECTIONS.map(([label, deg, icon]) =>
@@ -52,8 +54,24 @@ export class ConeConfig extends ApplicationV2 {
           </span>
         </div>
         <div class="asv-compass">${dirButtons}</div>
-        <p class="asv-hint">Die Blickrichtung ist die Drehung des Tokens. Du kannst den Token auch mit Shift + Mausrad drehen.
+        <p class="asv-hint">Nur der Kegel dreht sich, der Token selbst bleibt, wie er ist.
         0° schaut nach unten (Süden), 180° nach oben (Norden).</p>
+        ${tokenTurned ? `<p class="asv-hint warn">Der Token selbst ist gedreht (${Math.round(normDeg(num(this.doc.rotation)))}°).
+          <button type="button" data-action="straighten"><i class="fa-solid fa-rotate-left"></i> Token gerade stellen</button></p>` : ""}
+
+        <fieldset>
+          <legend>Erkennung</legend>
+          <label class="asv-check"><input type="radio" name="detect" value="enemies" ${c.detect !== "all" ? "checked" : ""}>
+            Nur Gegner (entgegengesetzte Gesinnung, z. B. Spieler bei feindlichen Wachen)</label>
+          <label class="asv-check"><input type="radio" name="detect" value="all" ${c.detect === "all" ? "checked" : ""}>
+            Alle Gesinnungen</label>
+          <label class="asv-check"><input type="checkbox" name="visible" ${c.visible ? "checked" : ""}>
+            Auch Token erkennen, die nicht versteckt sind</label>
+          <div class="form-group stacked">
+            <label>Diese Namen ignorieren (mit ; trennen)</label>
+            <input type="text" name="ignore" value="${esc(c.ignore)}" placeholder="z. B. Wirt; Barmaid; Stallbursche">
+          </div>
+        </fieldset>
         ${selected ? `<div class="form-group"><label>Auch für ${selected} weitere ausgewählte Token übernehmen</label><input type="checkbox" name="all"></div>` : ""}
         <footer class="asv-footer">
           <button type="button" data-action="save"><i class="fa-solid fa-floppy-disk"></i> Speichern</button>
@@ -74,19 +92,27 @@ export class ConeConfig extends ApplicationV2 {
     this.element.querySelector(".asv-dir output").textContent = `${range.value}°`;
   }
 
+  static async _onStraighten(event, target) {
+    await this.doc.update({ rotation: 0 });
+    target.closest("p")?.remove();
+  }
+
   static async _onSave() {
     const f = this.element.querySelector("form");
     const cone = {
       enabled: f.enabled.checked,
       range: Math.max(1, num(f.range.value, setting("defaultRange"))),
-      angle: clamp(num(f.angle.value, setting("defaultAngle")), 5, 360)
+      angle: clamp(num(f.angle.value, setting("defaultAngle")), 5, 360),
+      detect: f.querySelector('input[name="detect"]:checked')?.value === "all" ? "all" : "enemies",
+      visible: f.visible.checked,
+      ignore: f.ignore.value.split(";").map((n) => n.trim()).filter(Boolean).join("; ")
     };
-    const rotation = normDeg(num(f.rotation.value));
+    const facing = Math.round(normDeg(num(f.rotation.value)));
     const docs = [this.doc];
     if (f.all?.checked) docs.push(...canvas.tokens.controlled.map((t) => t.document).filter((d) => d !== this.doc));
     const updates = docs.map((d) => {
       const u = { _id: d.id, [`flags.${MID}.cone`]: cone };
-      if (d === this.doc) u.rotation = rotation;
+      if (d === this.doc) u[`flags.${MID}.facing`] = facing;
       return u;
     });
     await canvas.scene.updateEmbeddedDocuments("Token", updates);
@@ -126,6 +152,11 @@ export class ViewerConfig extends ApplicationV2 {
   }
 
   _replaceHTML(result, content) { content.innerHTML = result; }
+
+  static async _onStraighten(event, target) {
+    await this.doc.update({ rotation: 0 });
+    target.closest("p")?.remove();
+  }
 
   static async _onSave() {
     const map = {};
