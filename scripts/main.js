@@ -111,7 +111,7 @@ Hooks.once("init", () => {
   });
   reg("autoCombat", {
     name: "Bei Entdeckung pausieren und Kampf vorbereiten",
-    hint: "Nur wenn eine versteckte Figur entdeckt wird: Das Spiel wird pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt. Läuft in der Szene schon ein Kampf, passiert das nicht.",
+    hint: "Wenn eine Wache eine versteckte Figur entdeckt oder einen sichtbaren Gegner (entgegengesetzte Gesinnung) bemerkt: Das Spiel wird pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt. Läuft in der Szene schon ein Kampf, passiert das nicht.",
     type: Boolean, default: false
   });
   game.settings.register(MID, "coneViewers", {
@@ -217,10 +217,11 @@ onDetection(async (finds) => {
       });
     }
   }
-  const discovered = finds.filter((f) => f.wasHidden);
-  if (discovered.length && setting("autoCombat") && !combatRunningHere()) {
+  // Pause + Kampf-Fenster: bei entdeckten Versteckten und bei sichtbaren Gegnern
+  const hostile = finds.filter((f) => f.wasHidden || f.isEnemy);
+  if (hostile.length && setting("autoCombat") && !combatRunningHere()) {
     if (!game.paused) game.togglePause(true, { broadcast: true });
-    openCombatPrompt(discovered.map((f) => ({ watcher: f.watcher, hidden: f.target })));
+    openCombatPrompt(hostile.map((f) => ({ watcher: f.watcher, hidden: f.target })));
   }
 });
 

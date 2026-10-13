@@ -223,7 +223,9 @@ export class CombatPrompt extends ApplicationV2 {
   candidates() {
     const combat = this.existingCombat();
     const already = new Set(combat?.combatants.map((c) => c.tokenId) ?? []);
-    const toks = canvas.tokens.placeables.filter((t) => t.actor && !already.has(t.id));
+    // Nur Spielercharaktere, NSCs und Fahrzeuge
+    const types = ["character", "npc", "vehicle"];
+    const toks = canvas.tokens.placeables.filter((t) => t.actor && types.includes(t.actor.type) && !already.has(t.id));
     const anchor = canvas.tokens.get([...this.found][0]) ?? canvas.tokens.get([...this.watchers][0]);
     const dist = (t) => (anchor ? Math.hypot(t.x - anchor.x, t.y - anchor.y) : 0);
     const rank = (t) => (this.watchers.has(t.id) || this.found.has(t.id) ? 0 : t.actor.hasPlayerOwner ? 1 : 2);

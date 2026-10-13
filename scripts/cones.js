@@ -425,7 +425,7 @@ function runCheck() {
       const report = hidden || (isNew && cooled && state.primed && !inCombat);
       if (report && (hidden ? cooled || isNew : true)) {
         state.lastFired.set(key, now);
-        finds.push({ watcher: w, target: t, wasHidden: hidden });
+        finds.push({ watcher: w, target: t, wasHidden: hidden, isEnemy: isEnemy(w, t) });
       }
     }
   }

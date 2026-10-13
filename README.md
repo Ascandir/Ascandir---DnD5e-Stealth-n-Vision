@@ -35,7 +35,8 @@ https://github.com/Ascandir/Ascandir---DnD5e-Stealth-n-Vision/releases/latest/do
 - **Namen ignorieren:** z. B. `Wirt; Barmaid; Stallbursche` (Token- oder Actor-Name, Groß-/Kleinschreibung egal).
 - Bei Erkennung: gelbes **!** über dem Wächter, der Kegel schaut zum Ziel, der SL bekommt eine geflüsterte Chatnachricht.
 - Nicht versteckte Figuren werden nur beim **Hineinlaufen** gemeldet (nicht dauernd, nicht im Kampf).
-- Wer versteckt war, verliert „Versteckt“. Optional: Spiel pausieren und Kampf-Fenster öffnen.
+- Wer versteckt war, verliert „Versteckt“.
+- Optional: Spiel pausieren und Kampf-Fenster öffnen – bei entdeckten Versteckten und bei sichtbaren Gegnern (entgegengesetzte Gesinnung). Im Fenster stehen nur Spielercharaktere, NSCs und Fahrzeuge.
 - Unsichtbare, für Spieler versteckte und tote Token werden nicht erkannt. Blinde, bewusstlose oder tote Wachen erkennen niemanden.
 
 #### Zusammenspiel mit NPC Behavior Automation
