@@ -37,6 +37,7 @@ https://github.com/Ascandir/Ascandir---DnD5e-Stealth-n-Vision/releases/latest/do
 - Nicht versteckte Figuren werden nur beim **Hineinlaufen** gemeldet (nicht dauernd, nicht im Kampf).
 - Wer versteckt war, verliert „Versteckt“.
 - Optional: Spiel pausieren und Kampf-Fenster öffnen – bei entdeckten Versteckten und bei sichtbaren Gegnern (entgegengesetzte Gesinnung). Im Fenster stehen nur Spielercharaktere, NSCs und Fahrzeuge.
+- Optional: Bei **jeder** Erkennung das Spiel pausieren (auch ohne Kampf-Fenster).
 - Unsichtbare, für Spieler versteckte und tote Token werden nicht erkannt. Blinde, bewusstlose oder tote Wachen erkennen niemanden.
 
 #### Zusammenspiel mit NPC Behavior Automation

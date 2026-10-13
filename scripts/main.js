@@ -109,6 +109,11 @@ Hooks.once("init", () => {
     name: "Erkennung im Chat melden (nur SL)",
     type: Boolean, default: true
   });
+  reg("pauseOnDetection", {
+    name: "Bei jeder Erkennung das Spiel pausieren",
+    hint: "Egal ob versteckt oder sichtbar, Gegner oder nicht: Sobald ein Sichtkegel jemanden erkennt, wird das Spiel pausiert.",
+    type: Boolean, default: false
+  });
   reg("autoCombat", {
     name: "Bei Entdeckung pausieren und Kampf vorbereiten",
     hint: "Wenn eine Wache eine versteckte Figur entdeckt oder einen sichtbaren Gegner (entgegengesetzte Gesinnung) bemerkt: Das Spiel wird pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt. Läuft in der Szene schon ein Kampf, passiert das nicht.",
@@ -217,6 +222,8 @@ onDetection(async (finds) => {
       });
     }
   }
+  if (setting("pauseOnDetection") && !game.paused) game.togglePause(true, { broadcast: true });
+
   // Pause + Kampf-Fenster: bei entdeckten Versteckten und bei sichtbaren Gegnern
   const hostile = finds.filter((f) => f.wasHidden || f.isEnemy);
   if (hostile.length && setting("autoCombat") && !combatRunningHere()) {
