@@ -1,0 +1,40 @@
+# Ascandir - DnD5e Stealth n Vision
+
+Heimlichkeit mit System für Foundry VTT (getestet mit v14.368 und dnd5e 6.0.6).
+
+## Installation
+
+In Foundry unter **Module installieren** diese Manifest-URL eintragen:
+
+```
+https://github.com/Ascandir/Ascandir---DnD5e-Stealth-n-Vision/releases/latest/download/module.json
+```
+
+## Was das Modul macht
+
+### Heimlichkeitswert im Rechtsklick-Menü (nur SL)
+- Würfelt eine Figur **Heimlichkeit** und hat den Status **Versteckt**, steht der Wert im Token-HUD links neben dem Token.
+- Wird „Versteckt“ entfernt, ist das Kästchen wieder leer.
+- Wurde erst gewürfelt und danach „Versteckt“ gesetzt, zählt der Wurf, wenn er nicht älter als 5 Minuten ist (einstellbar).
+- Der SL kann den Wert im Kästchen ändern. Trägt er bei einer nicht versteckten Figur einen Wert ein, wird sie versteckt.
+- Darunter steht die passive Wahrnehmung (WN) des Tokens.
+
+### Angriff aus dem Versteck
+- Greift eine versteckte Figur ein Ziel an und ist ihre Heimlichkeit **höher** als die passive Wahrnehmung des Ziels, gilt der Angriff automatisch mit **Vorteil**. Im Chat steht der Grund dabei.
+- Optional: Nach dem Angriff ist die Figur nicht mehr versteckt.
+
+### Sichtkegel
+- Rechtsklick auf einen Token → Knopf mit dem Auge: Sichtkegel an, Reichweite, Öffnungswinkel, Blickrichtung. Mehrere ausgewählte Token lassen sich gleich mit einstellen.
+- Die Blickrichtung ist die Drehung des Tokens (auch mit Shift + Mausrad).
+- Nur der SL sieht die Kegel. In den Moduleinstellungen kann er sie einzelnen Spielern freigeben. Jeder kann sie mit dem Augen-Knopf in der Token-Leiste für sich ausblenden.
+- Läuft eine versteckte Figur in einen Sichtkegel, verliert sie „Versteckt“ und über dem Entdecker erscheint ein gelbes **!**.
+- Wände und geschlossene Türen blockieren den Kegel. Unsichtbare Figuren werden nicht entdeckt, ebenso wenig blinde, bewusstlose oder tote Wachen.
+- Optional: Bei Entdeckung wird das Spiel pausiert und der SL wählt in einem Fenster aus, wer dem Kampf beitritt.
+- Zusammen mit **Ascandir - DnD5e NPC Behavior Automation** drehen sich die Kegel laufender NSCs in Laufrichtung (einstellbar: aus / nur NPC-Behavior / alle).
+
+### Versteckt+ (nur SL)
+- Knopf im Rechtsklick-Menü von Spielerfiguren (Versteckt-Symbol mit Plus).
+- Für Figuren, die sich so gut verstecken (unterm Tisch, im Gebüsch), dass ein Sichtkegel sie nicht findet. Wird „Versteckt“ entfernt, verschwindet auch „Versteckt+“.
+
+## Hinweis
+Entdeckt wird beim SL, und zwar auf der Szene, die er gerade ansieht.
