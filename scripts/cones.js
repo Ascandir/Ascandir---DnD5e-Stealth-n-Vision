@@ -7,7 +7,7 @@
 
 import {
   MID, SOCKET, HIDING, HIDING_PLUS, NPCB, BLIND_STATUSES,
-  setting, isLeader, num, clamp, hasStatus, normDeg, angDiff, angleLerp, liveCenter, esc
+  setting, isLeader, isFullGM, num, clamp, hasStatus, normDeg, angDiff, angleLerp, liveCenter, esc
 } from "./util.js";
 
 const state = {
@@ -80,7 +80,8 @@ export function rawConeConfig(doc) {
 
 export function userSeesCones(user = game.user) {
   if (!setting("conesEnabled") || !setting("showCones")) return false;
-  if (user.isGM) return true;
+  // Ohne Freigabe sieht nur der Spielleiter die Kegel (auch keine Assistenten)
+  if (isFullGM(user)) return true;
   return !!setting("coneViewers")?.[user.id];
 }
 

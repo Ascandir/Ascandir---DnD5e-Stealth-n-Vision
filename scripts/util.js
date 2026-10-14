@@ -10,6 +10,8 @@ export const HIDING_PLUS = "ascandir-hiding-plus";
 export const NPCB = "ascandir-npc-behavior";
 
 export const setting = (key) => game.settings.get(MID, key);
+/** Richtiger Spielleiter (nicht nur Assistent) */
+export const isFullGM = (user = game.user) => (user?.role ?? 0) >= CONST.USER_ROLES.GAMEMASTER;
 export const isLeader = () => game.user.isGM && game.users.activeGM?.id === game.user.id;
 export const num = (v, d = 0) => (v !== "" && v !== null && Number.isFinite(Number(v)) ? Number(v) : d);
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

@@ -1,6 +1,6 @@
 /* Fenster: Sichtkegel einstellen, Spieler-Freigabe, Kampf nach Entdeckung */
 
-import { MID, setting, num, clamp, normDeg, esc } from "./util.js";
+import { MID, setting, num, clamp, normDeg, esc, isFullGM } from "./util.js";
 import { rawConeConfig, storedFacing } from "./cones.js";
 
 const { ApplicationV2 } = foundry.applications.api;
@@ -135,7 +135,7 @@ export class ViewerConfig extends ApplicationV2 {
 
   async _renderHTML() {
     const allowed = setting("coneViewers") ?? {};
-    const players = game.users.filter((u) => !u.isGM);
+    const players = game.users.filter((u) => !isFullGM(u));
     const rows = players.length
       ? players.map((u) => `
           <label class="asv-check">

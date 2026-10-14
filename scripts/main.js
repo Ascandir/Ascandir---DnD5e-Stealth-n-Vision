@@ -13,7 +13,7 @@
  * Entdeckt wird nur beim aktiven SL-Client (auf der Szene, die er gerade ansieht).
  */
 
-import { MID, SOCKET, HIDING, HIDING_PLUS, NPCB, setting, hasStatus, hidingImg, esc } from "./util.js";
+import { MID, SOCKET, HIDING, HIDING_PLUS, NPCB, setting, hasStatus, hidingImg, esc, isFullGM } from "./util.js";
 import { registerStealthHooks, stealthHudElement, toggleHidingPlus } from "./stealth.js";
 import {
   setupLayer, teardownLayer, refreshCone, refreshAllCones, queueRedraw, wallsChanged, forgetToken,
@@ -123,9 +123,8 @@ Hooks.once("init", () => {
     scope: "world", config: false, type: Object, default: {}, onChange: redraw
   });
   game.settings.register(MID, "showCones", {
-    name: "Sichtkegel anzeigen",
-    hint: "Nur auf diesem Rechner. Auch über den Knopf in der Token-Leiste umschaltbar.",
-    scope: "client", config: true, type: Boolean, default: true, onChange: redraw
+    // Nicht in den Einstellungen: nur über den Knopf in der Token-Leiste (SL und vom SL freigegebene Spieler)
+    scope: "client", config: false, type: Boolean, default: true, onChange: redraw
   });
   game.settings.registerMenu(MID, "viewers", {
     name: "Sichtkegel für Spieler",
@@ -349,7 +348,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 
 /* Knopf in der Token-Werkzeugleiste: Sichtkegel ein/aus (für SL und freigegebene Spieler) */
 Hooks.on("getSceneControlButtons", (controls) => {
-  if (!game.user.isGM && !setting("coneViewers")?.[game.user.id]) return;
+  if (!isFullGM() && !setting("coneViewers")?.[game.user.id]) return;
   const tokens = controls.tokens ?? controls.token;
   if (!tokens?.tools || Array.isArray(tokens.tools)) return;
   tokens.tools[`${MID}-cones`] = {
