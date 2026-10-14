@@ -21,8 +21,23 @@ const state = {
   inside: new Set(),     // "wächterId|zielId" – wer gerade im Kegel steht
   lastFired: new Map(),  // "wächterId|zielId" → Zeitpunkt der letzten Meldung
   primed: false,         // erste Prüfung nach dem Laden meldet bereits Sichtbare nicht
-  warnedPoly: false
+  warnedPoly: false,
+  watchers: null,        // Gibt es in der Szene Token mit Sichtkegel? (null = neu ermitteln)
+  color: { raw: null, value: 0xf2c94c }
 };
+
+/** Gibt es in der aktuellen Szene mindestens einen Token mit Sichtkegel? (zwischengespeichert) */
+function anyWatchers() {
+  if (state.watchers === null) {
+    state.watchers = !!canvas?.ready && canvas.tokens.placeables.some((t) => coneConfig(t.document));
+  }
+  return state.watchers;
+}
+
+/** Sichtkegel wurden hinzugefügt/entfernt → beim nächsten Mal neu zählen */
+export function watchersChanged() {
+  state.watchers = null;
+}
 
 let detectionHandler = null;
 export function onDetection(fn) { detectionHandler = fn; }
@@ -118,6 +133,7 @@ export function setupLayer() {
   parent.addChild(layer);
   state.layer = layer;
   state.wallVersion++;
+  state.watchers = null;
 }
 
 export function teardownLayer() {
@@ -196,7 +212,12 @@ export function conePolygon(token, cfg = coneConfig(token.document)) {
 /* ------------------------------------------------------------------ */
 
 function coneColor() {
-  try { const C = foundry.utils?.Color ?? globalThis.Color; return Number(C.from(setting("coneColor") || "#f2c94c")); } catch (err) { return 0xf2c94c; }
+  const raw = setting("coneColor") || "#f2c94c";
+  if (raw === state.color.raw) return state.color.value;
+  let value = 0xf2c94c;
+  try { const C = foundry.utils?.Color ?? globalThis.Color; value = Number(C.from(raw)); } catch (err) { /* Standardfarbe */ }
+  state.color = { raw, value };
+  return value;
 }
 
 function drawPoly(g, poly, color, fillAlpha, lineAlpha) {
@@ -241,7 +262,12 @@ export function refreshCone(token) {
     state.gfx.set(token.id, g);
   }
   const dim = token.document.hidden ? 0.5 : 1;
-  drawPoly(g, poly, coneColor(), 0.14 * dim, 0.65 * dim);
+  const color = coneColor();
+  // Nichts verändert (gleiches Polygon, Farbe, Abdunklung)? Dann nicht neu zeichnen.
+  const drawn = g._asvDrawn;
+  if (drawn && drawn.poly === poly && drawn.color === color && drawn.dim === dim) return;
+  drawPoly(g, poly, color, 0.14 * dim, 0.65 * dim);
+  g._asvDrawn = { poly, color, dim };
 }
 
 export function refreshAllCones() {
@@ -264,6 +290,7 @@ export function queueRedraw() {
 }
 
 export function forgetToken(id) {
+  state.watchers = null;
   removeGfx(id);
   state.polys.delete(id);
   const l = state.live.get(id);
@@ -339,6 +366,11 @@ export function facingChanged(doc) {
 
 export function scheduleCheck() {
   if (!isLeader() || state.checkQueued) return;
+  // Ohne einen einzigen Sichtkegel in der Szene gibt es nichts zu prüfen
+  if (!anyWatchers()) {
+    state.inside.clear();
+    return;
+  }
   state.checkQueued = true;
   setTimeout(() => {
     state.checkQueued = false;

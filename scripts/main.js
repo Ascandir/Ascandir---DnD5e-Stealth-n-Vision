@@ -18,7 +18,7 @@ import { registerStealthHooks, stealthHudElement, toggleHidingPlus } from "./ste
 import {
   setupLayer, teardownLayer, refreshCone, refreshAllCones, queueRedraw, wallsChanged, forgetToken,
   trackMovement, facingChanged, scheduleCheck, resetDetection, onDetection, broadcastAlert, showAlert,
-  coneConfig, tokenName, setFacing, facingTowards
+  coneConfig, tokenName, setFacing, facingTowards, watchersChanged
 } from "./cones.js";
 import { ConeConfig, ViewerConfig, openCombatPrompt } from "./apps.js";
 
@@ -284,6 +284,8 @@ Hooks.on("refreshToken", (token) => {
 Hooks.on("updateToken", (doc, changes) => {
   if (doc.parent !== canvas.scene) return;
   if (foundry.utils.hasProperty(changes, `flags.${MID}.facing`)) facingChanged(doc);
+  if (foundry.utils.hasProperty(changes, `flags.${MID}.cone`) || changes.flags?.[`-=${MID}`] !== undefined
+    || changes.flags?.[MID]?.["-=cone"] !== undefined) watchersChanged();
   if (foundry.utils.hasProperty(changes, `flags.${MID}`) || "hidden" in changes || "disposition" in changes || "name" in changes) {
     const t = doc.object;
     if (t) refreshCone(t);
@@ -291,6 +293,7 @@ Hooks.on("updateToken", (doc, changes) => {
   }
 });
 Hooks.on("deleteToken", (doc) => forgetToken(doc.id));
+Hooks.on("createToken", (doc) => { if (doc.parent === canvas.scene) watchersChanged(); });
 Hooks.on("sightRefresh", () => queueRedraw());
 
 for (const hook of ["createWall", "updateWall", "deleteWall"]) Hooks.on(hook, () => wallsChanged());
