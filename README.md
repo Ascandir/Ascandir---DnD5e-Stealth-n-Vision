@@ -1,6 +1,6 @@
 # Ascandir - DnD5e Stealth n Vision
 
-Heimlichkeit mit System für Foundry VTT (getestet mit v14.368 und dnd5e 6.0.6).
+Heimlichkeit mit System für Foundry VTT (getestet mit v14.369.1 und dnd5e 6.0.6).
 
 ## Installation
 
