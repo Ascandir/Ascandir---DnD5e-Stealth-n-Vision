@@ -26,7 +26,7 @@ https://github.com/Ascandir/Ascandir---DnD5e-Stealth-n-Vision/releases/latest/do
 ### Sichtkegel
 - Rechtsklick auf einen Token → Knopf mit dem Auge: Sichtkegel an, Reichweite, Öffnungswinkel, Blickrichtung. Mehrere ausgewählte Token lassen sich gleich mit einstellen.
 - Der Kegel hat eine eigene Blickrichtung. **Der Token selbst wird nie gedreht.** Ist ein Token noch gedreht, gibt es im Fenster einen Knopf „Token gerade stellen“.
-- Nur der SL sieht die Kegel. Nur er kann sie in den Moduleinstellungen einzelnen Spielern freigeben (auch Assistenten brauchen eine Freigabe). Wer sie sehen darf, kann sie mit dem Augen-Knopf in der Token-Leiste für sich ausblenden.
+- Nur der SL sieht die Kegel. Nur er kann sie in den Moduleinstellungen einzelnen Spielern freigeben. Wer sie sehen darf, kann sie mit dem Augen-Knopf in der Token-Leiste oder in den Einstellungen („Sichtkegel anzeigen“) für sich aus- und einblenden.
 - Wände und geschlossene Türen blockieren den Kegel.
 
 #### Erkennung (pro Token einstellbar)

@@ -7,7 +7,7 @@
 
 import {
   MID, SOCKET, HIDING, HIDING_PLUS, NPCB, BLIND_STATUSES,
-  setting, isLeader, isFullGM, num, clamp, hasStatus, normDeg, angDiff, angleLerp, liveCenter, esc
+  setting, isLeader, num, clamp, hasStatus, normDeg, angDiff, angleLerp, liveCenter, esc
 } from "./util.js";
 
 const state = {
@@ -80,8 +80,8 @@ export function rawConeConfig(doc) {
 
 export function userSeesCones(user = game.user) {
   if (!setting("conesEnabled") || !setting("showCones")) return false;
-  // Ohne Freigabe sieht nur der Spielleiter die Kegel (auch keine Assistenten)
-  if (isFullGM(user)) return true;
+  // SL (auch Assistenten) sehen die Kegel immer, Spieler nur mit Freigabe
+  if (user.isGM) return true;
   return !!setting("coneViewers")?.[user.id];
 }
 
@@ -178,6 +178,22 @@ function simpleCone(c, radius, angle, facing) {
 }
 
 /** Polygon des Sichtkegels (Wände schneiden ihn ab, wenn eingestellt) */
+/** Zustand für die Fehlersuche (game.modules.get("ascandir-stealth-vision").api.diagnose()) */
+export function coneDiagnose() {
+  const tokens = canvas?.tokens?.placeables ?? [];
+  return {
+    user: game.user.name, role: game.user.role, isGM: game.user.isGM,
+    conesEnabled: setting("conesEnabled"), showCones: setting("showCones"),
+    userSeesCones: userSeesCones(),
+    layer: !!state.layer && !state.layer.destroyed, layerParent: state.layer?.parent?.name ?? state.layer?.parent?.constructor?.name ?? null,
+    pixi: PIXI?.VERSION,
+    tokensWithCone: tokens.filter((t) => coneConfig(t.document)).map((t) => ({
+      name: t.document.name, cfg: coneConfig(t.document), drawn: !!state.gfx.get(t.id) && !state.gfx.get(t.id).destroyed,
+      points: conePolygon(t)?.points?.length ?? 0
+    }))
+  };
+}
+
 export function conePolygon(token, cfg = coneConfig(token.document)) {
   if (!cfg || !canvas?.dimensions) return null;
   const c = liveCenter(token);
@@ -196,7 +212,8 @@ export function conePolygon(token, cfg = coneConfig(token.document)) {
         { x: c.x, y: c.y, elevation: num(token.document.elevation) },
         { type: "sight", radius, angle: cfg.angle, rotation: facing }
       );
-      if (!poly?.points?.length) poly = null;
+      // Unbrauchbares Ergebnis (z. B. leer) → einfacher Kegel ohne Wände
+      if (!(poly?.points?.length >= 6)) poly = null;
     } catch (err) {
       if (!state.warnedPoly) console.warn(`${MID} | Sichtkegel ohne Wandberechnung (Fallback)`, err);
       state.warnedPoly = true;

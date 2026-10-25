@@ -13,12 +13,12 @@
  * Entdeckt wird nur beim aktiven SL-Client (auf der Szene, die er gerade ansieht).
  */
 
-import { MID, SOCKET, HIDING, HIDING_PLUS, NPCB, setting, hasStatus, hidingImg, esc, isFullGM } from "./util.js";
+import { MID, SOCKET, HIDING, HIDING_PLUS, NPCB, setting, hasStatus, hidingImg, esc } from "./util.js";
 import { registerStealthHooks, stealthHudElement, toggleHidingPlus } from "./stealth.js";
 import {
   setupLayer, teardownLayer, refreshCone, refreshAllCones, queueRedraw, wallsChanged, forgetToken,
   trackMovement, facingChanged, scheduleCheck, resetDetection, onDetection, broadcastAlert, showAlert,
-  coneConfig, tokenName, setFacing, facingTowards, watchersChanged
+  coneConfig, tokenName, setFacing, facingTowards, watchersChanged, coneDiagnose
 } from "./cones.js";
 import { ConeConfig, ViewerConfig, openCombatPrompt } from "./apps.js";
 
@@ -123,8 +123,9 @@ Hooks.once("init", () => {
     scope: "world", config: false, type: Object, default: {}, onChange: redraw
   });
   game.settings.register(MID, "showCones", {
-    // Nicht in den Einstellungen: nur über den Knopf in der Token-Leiste (SL und vom SL freigegebene Spieler)
-    scope: "client", config: false, type: Boolean, default: true, onChange: redraw
+    name: "Sichtkegel anzeigen",
+    hint: "Nur auf diesem Rechner. Spieler sehen diese Einstellung nur, wenn der SL ihnen die Sichtkegel freigegeben hat.",
+    scope: "client", config: true, type: Boolean, default: true, onChange: redraw
   });
   game.settings.registerMenu(MID, "viewers", {
     name: "Sichtkegel für Spieler",
@@ -262,7 +263,8 @@ Hooks.once("ready", () => {
     openCone: (tokenDoc) => new ConeConfig(tokenDoc).render(true),
     openViewers: () => new ViewerConfig().render(true),
     alert: (tokenId) => broadcastAlert(tokenId),
-    check: () => scheduleCheck()
+    check: () => scheduleCheck(),
+    diagnose: () => { const d = coneDiagnose(); console.log(`${MID} | Diagnose`, d); return d; }
   };
   console.log(`${MID} | v${game.modules.get(MID)?.version} geladen`);
 });
@@ -348,7 +350,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 
 /* Knopf in der Token-Werkzeugleiste: Sichtkegel ein/aus (für SL und freigegebene Spieler) */
 Hooks.on("getSceneControlButtons", (controls) => {
-  if (!isFullGM() && !setting("coneViewers")?.[game.user.id]) return;
+  if (!game.user.isGM && !setting("coneViewers")?.[game.user.id]) return;
   const tokens = controls.tokens ?? controls.token;
   if (!tokens?.tools || Array.isArray(tokens.tools)) return;
   tokens.tools[`${MID}-cones`] = {
@@ -360,4 +362,11 @@ Hooks.on("getSceneControlButtons", (controls) => {
     order: 95,
     onChange: (event, active) => game.settings.set(MID, "showCones", !!active)
   };
+});
+
+/* "Sichtkegel anzeigen" nur für SL und freigegebene Spieler in den Einstellungen zeigen */
+Hooks.on("renderSettingsConfig", (app, html) => {
+  if (game.user.isGM || setting("coneViewers")?.[game.user.id]) return;
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  root?.querySelector(`[name="${MID}.showCones"]`)?.closest(".form-group")?.remove();
 });
